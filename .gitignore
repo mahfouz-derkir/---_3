@@ -1,0 +1,391 @@
+MAHFOUZ AL-HATTAMI
+
+ 
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>حاسبة وزن وسعر الحديد</title>
+  <style>
+    body{font-family:Arial, sans-serif;direction:rtl;padding:20px;background:#f7f7f7}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    th,td{padding:8px;border:1px solid #ddd;text-align:center}
+    th{background:#2b6cb0;color:#fff}
+    input[type="number"], input[type="text"]{padding:6px}
+    .summary{margin-top:12px;padding:12px;background:#fff;border:1px solid #ddd}
+    .btn{padding:8px 12px;background:#2b6cb0;color:#fff;border:none;cursor:pointer}
+    .btn-secondary{background:#4a5568}
+    .controls{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .client-row{margin-bottom:12px;background:#fff;padding:10px;border:1px solid #ddd}
+    .footer{margin-top:18px;padding:12px;background:#fff;border:1px solid #ddd;text-align:center;font-size:13px;color:#333}
+    .small{font-size:12px;color:#666}
+
+    /* رأس الطباعة مخفي على الشاشة ويظهر عند الطباعة */
+    #printHeader{display:none;padding:10px;border-bottom:1px solid #ccc;margin-bottom:12px;background:#fff}
+    #printHeader h4{margin:0 0 6px 0}
+    #printHeader .meta{font-size:13px;color:#555}
+    #printHeader .owner{margin-top:6px;font-size:13px;color:#333}
+
+    @media print {
+      .btn, .controls, .client-row, .footer { display: none !important; }
+      body{background:#fff;padding:0}
+      #printHeader{display:block}
+      /* تحسين عرض الجدول عند الطباعة */
+      table{page-break-inside:auto}
+      tr{page-break-inside:avoid;page-break-after:auto}
+      /* إخفاء عناصر محددة عند الطباعة */
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- رأس الطباعة يظهر فقط عند الطباعة -->
+  <div id="printHeader" aria-hidden="true">
+    <h4 id="printClient">اسم العميل: —</h4>
+    <div class="meta" id="printMeta">تاريخ الطباعة: —</div>
+    <div class="owner">تم إنشاء هذا البرنامج بواسطة: محفوظ الحطامي — للتواصل: https://wa.me/967780788664</div>
+  </div>
+
+  <!-- اسم العميل في أعلى الشاشة -->
+  <div class="client-row">
+    <label><strong>اسم العميل:</strong></label>
+    <input type="text" id="clientName" placeholder="أدخل اسم العميل هنا" style="padding:6px;margin-right:8px;width:220px" aria-label="اسم العميل" />
+    <span class="small">سيظهر الاسم في رأس الطباعة وملفات التصدير</span>
+  </div>
+
+  <h3>حاسبة وزن وسعر الحديد</h3>
+
+  <p id="introText" class="no-print">أدخل العدد لكل مقاس وسيتم حساب إجمالي الوزن بالطن، إجمالي عدد الأسياخ، وإجمالي سعر الصنف (سعر الطن). الآن وزن البندل معبر عنه بالطن.</p>
+
+  <table id="calcTable">
+    <thead>
+      <tr>
+        <th>المقاس</th>
+        <th>وزن البندل (طن)</th>
+        <th>عدد الأسياخ في البندل</th>
+        <th>عدد (البنادل)</th>
+        <th>إجمالي الأسياخ</th>
+        <th>إجمالي الوزن (طن)</th>
+        <th>إجمالي سعر الصنف</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div style="margin-top:10px">
+    <button class="btn" onclick="addRow()">أضف صف</button>
+    <button class="btn" onclick="resetCounts()" style="background:#e53e3e">إعادة تعيين الأعداد</button>
+  </div>
+
+  <div class="summary">
+    <div><strong>الإجمالي النهائي لوزن الحديد (طن):</strong> <span id="totalWeight">0.000</span></div>
+    <div style="margin-top:8px">
+      <label><strong>أدخل السعر لكل طن</strong></label>
+      <input type="number" id="pricePerTon" step="0.01" min="0" value="" aria-label="سعر الطن" />
+      <button class="btn" onclick="calculatePrice()" style="margin-right:8px">احسب السعر النهائي</button>
+    </div>
+    <div style="margin-top:8px"><strong>الإجمالي النهائي للسعر:</strong> <span id="totalPrice">0.00</span></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" onclick="printPage()">طباعة / حفظ كـ PDF</button>
+    <button class="btn btn-secondary" onclick="exportCSV()">تصدير CSV</button>
+    <button class="btn btn-secondary" onclick="exportJSON()">تصدير JSON</button>
+    <button class="btn" onclick="copySummary()">نسخ الملخص للحافظة</button>
+  </div>
+
+  <div class="footer" id="footerNote">
+    <div><strong>تم إنشاء هذا البرنامج بواسطة: محفوظ الحطامي</strong></div>
+    <div class="small">للتواصل: <a href="https://wa.me/967780788664" target="_blank">https://wa.me/967780788664</a></div>
+  </div>
+
+  <script>
+    // بيانات افتراضية: bundleWeightTon بالطن (كما طلبت — 1.991 بالطن)
+    const defaultData = [
+      {size: '8',  bundleWeightTon: 1.991, rodsPerBundle: 420},
+      {size: '10', bundleWeightTon: 1.999, rodsPerBundle: 270},
+      {size: '12', bundleWeightTon: 1.918, rodsPerBundle: 180},
+      {size: '14', bundleWeightTon: 1.975, rodsPerBundle: 136},
+      {size: '16', bundleWeightTon: 1.972, rodsPerBundle: 104},
+      {size: '18', bundleWeightTon: 1.968, rodsPerBundle: 80}
+    ];
+
+    const tbody = document.getElementById('rows');
+    const totalWeightEl = document.getElementById('totalWeight'); // طن
+    const totalPriceEl = document.getElementById('totalPrice');
+
+    function createRow(item) {
+      const tr = document.createElement('tr');
+
+      const tdSize = document.createElement('td');
+      tdSize.textContent = item.size;
+      tr.appendChild(tdSize);
+
+      const tdBundle = document.createElement('td');
+      // عرض وزن البندل بالطن بدقة 3 منازل عشرية (لأن الأوزان ~1.9 طن)
+      tdBundle.textContent = Number(item.bundleWeightTon).toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+      tr.appendChild(tdBundle);
+
+      const tdRodsPer = document.createElement('td');
+      tdRodsPer.textContent = String(item.rodsPerBundle || 0);
+      tr.appendChild(tdRodsPer);
+
+      const tdCount = document.createElement('td');
+      const inputCount = document.createElement('input');
+      inputCount.type = 'number';
+      inputCount.min = '0';
+      inputCount.step = '1';
+      inputCount.placeholder = '0';
+      inputCount.style.width = '90px';
+      inputCount.setAttribute('aria-label', `عدد البنادل للمقاس ${item.size}`);
+      inputCount.addEventListener('input', function () {
+        // تنظيف الإدخال: لا نسمح بالقيم السالبة، ونحول القيم العشرية إلى عدد صحيح
+        if (this.value === '') {
+          updateRowTotals();
+          return;
+        }
+        let v = Number(this.value);
+        if (isNaN(v) || v < 0) {
+          this.value = '';
+        } else {
+          // نقوم بتقريبها لأسفل كعدد بنادل صحيح
+          this.value = String(Math.floor(v));
+        }
+        updateRowTotals();
+      });
+      tdCount.appendChild(inputCount);
+      tr.appendChild(tdCount);
+
+      const tdTotalRods = document.createElement('td');
+      tdTotalRods.textContent = '0';
+      tr.appendChild(tdTotalRods);
+
+      const tdTotalWeight = document.createElement('td');
+      tdTotalWeight.textContent = '0.000';
+      tr.appendChild(tdTotalWeight);
+
+      const tdTotalPrice = document.createElement('td');
+      tdTotalPrice.textContent = '0.00';
+      tr.appendChild(tdTotalPrice);
+
+      // نخزن وزن البندل بالطن في dataset
+      tr.dataset.bundleWeight = String(item.bundleWeightTon); // طن
+      tr.dataset.rodsPerBundle = String(item.rodsPerBundle || 0);
+
+      tbody.appendChild(tr);
+    }
+
+    function loadDefaults() {
+      tbody.innerHTML = '';
+      defaultData.forEach(d => createRow(d));
+      updateRowTotals();
+    }
+
+    // دالة التحديث المعدلة: تستخدم وزن البندل بالطن مباشرة
+    function updateRowTotals() {
+      let grandTons = 0;
+      let grandPrice = 0;
+      const pricePerTon = Number(document.getElementById('pricePerTon').value || 0);
+
+      Array.from(tbody.children).forEach(tr => {
+        const bundleTon = parseFloat(tr.dataset.bundleWeight || 0); // وزن البندل بالطن
+        const rodsPerBundle = Number(tr.dataset.rodsPerBundle || 0); // عدد الأسياخ في البندل
+        const countInput = tr.querySelector('input[type="number"]');
+        const count = Number(countInput.value || 0); // عدد البنادل (صفر إذا فارغ)
+
+        // حسابات طبق الصيغة المطلوبة (الوزن الآن بالطن مباشرة)
+        const rowTotalRods = rodsPerBundle * count; // عدد الأسياخ الإجمالي لهذا المقاس
+        const rowTons = bundleTon * count; // إجمالي الوزن بالطن
+        const rowPrice = pricePerTon > 0 ? rowTons * pricePerTon : 0; // سعر الصنف = إجمالي الوزن (طن) × سعر الطن
+
+        // عرض في خلايا الجدول (للعرض نستخدم التنسيق المحلي)
+        tr.cells[4].textContent = rowTotalRods.toLocaleString();
+        tr.cells[5].textContent = rowTons.toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+        tr.cells[6].textContent = rowPrice.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+
+        // تجميع الكل (نستخدم القيم العددية الخام)
+        grandTons += rowTons;
+        grandPrice += rowPrice;
+      });
+
+      // عرض الإجماليات النهائية
+      totalWeightEl.textContent = grandTons.toLocaleString(undefined, {minimumFractionDigits:3, maximumFractionDigits:3});
+      totalPriceEl.textContent = (Number(document.getElementById('pricePerTon').value || 0) > 0)
+        ? grandPrice.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})
+        : '0.00';
+    }
+
+    function calculatePrice() {
+      // زر لإعادة الحساب صراحةً — يقوم بتطبيق نفس الصيغة أعلاه
+      updateRowTotals();
+    }
+
+    function addRow() {
+      const size = prompt('أدخل المقاس (مثال: 20)');
+      if (!size) return;
+      // نطلب وزن البندل بالطن الآن
+      const bw = prompt('أدخل وزن البندل بالطن كقيمة عشرية (مثال: 1.234)');
+      const bundleWeightTon = parseFloat(bw);
+      if (isNaN(bundleWeightTon) || bundleWeightTon <= 0) {
+        alert('الوزن غير صالح');
+        return;
+      }
+      const rods = prompt('أدخل عدد الأسياخ في البندل (مثال: 120)');
+      const rodsNum = parseInt(rods, 10);
+      if (isNaN(rodsNum) || rodsNum < 0) {
+        alert('عدد الأسياخ غير صالح');
+        return;
+      }
+      createRow({size: size, bundleWeightTon: bundleWeightTon, rodsPerBundle: rodsNum});
+      updateRowTotals();
+    }
+
+    function resetCounts() {
+      Array.from(tbody.querySelectorAll('input[type="number"]')).forEach(i => i.value = '');
+      document.getElementById('pricePerTon').value = '';
+      updateRowTotals();
+    }
+
+    loadDefaults();
+    document.getElementById('pricePerTon').addEventListener('input', updateRowTotals);
+
+    /* وظائف الطباعة والتصدير المحدثة */
+
+    function printPage() {
+      // ضع اسم العميل وتاريخ الطباعة في رأس الطباعة
+      const client = document.getElementById('clientName').value.trim() || '—';
+      const now = new Date();
+      const dateStr = now.toLocaleString('ar-EG', {year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      document.getElementById('printClient').textContent = 'اسم العميل: ' + client;
+      document.getElementById('printMeta').textContent = 'تاريخ الطباعة: ' + dateStr;
+
+      // تأكد من تحديث الحسابات قبل الطباعة
+      updateRowTotals();
+
+      // استدعاء الطباعة بعد تحديث الرأس
+      window.print();
+    }
+
+    function exportCSV() {
+      const client = document.getElementById('clientName').value.trim();
+      const pricePerTon = Number(document.getElementById('pricePerTon').value || 0);
+      const rows = [];
+      rows.push(['اسم العميل', client || '']);
+      rows.push(['تم إنشاء هذا البرنامج بواسطة', 'محفوظ الحطامي']);
+      rows.push(['للتواصل', 'https://wa.me/967780788664']);
+      rows.push([]);
+      rows.push(['المقاس','وزن البندل (طن)','عدد الأسياخ في البندل','العدد (باندل)','إجمالي الأسياخ','إجمالي الوزن (طن)','إجمالي سعر الصنف']);
+      Array.from(tbody.children).forEach(tr => {
+        const size = tr.cells[0].textContent.trim();
+        const bundleTon = parseFloat(tr.dataset.bundleWeight || 0);
+        const rodsPer = Number(tr.dataset.rodsPerBundle || 0);
+        const count = Number(tr.querySelector('input[type="number"]').value || 0);
+        const totalRods = rodsPer * count;
+        const totalWeightTon = bundleTon * count;
+        const totalRowPrice = pricePerTon > 0 ? totalWeightTon * pricePerTon : 0;
+        rows.push([
+          size,
+          bundleTon.toFixed(3),
+          rodsPer,
+          count,
+          totalRods,
+          totalWeightTon.toFixed(3),
+          totalRowPrice.toFixed(2)
+        ]);
+      });
+      rows.push([]);
+      // حساب الإجماليات الخام
+      let grandTons = 0;
+      let grandPrice = 0;
+      Array.from(tbody.children).forEach(tr => {
+        const bundleTon = parseFloat(tr.dataset.bundleWeight || 0);
+        const count = Number(tr.querySelector('input[type="number"]').value || 0);
+        const totalWeightTon = bundleTon * count;
+        grandTons += totalWeightTon;
+        grandPrice += (Number(document.getElementById('pricePerTon').value || 0) > 0) ? totalWeightTon * Number(document.getElementById('pricePerTon').value) : 0;
+      });
+      rows.push(['الإجمالي النهائي لوزن الحديد (طن)', grandTons.toFixed(3)]);
+      rows.push(['الإجمالي النهائي للسعر', grandPrice.toFixed(2)]);
+
+      const csvContent = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeClient = client ? client.replace(/\s+/g,'_') + '_' : '';
+      const fileName = 'ironcalculator_' + safeClient + new Date().toISOString().slice(0,10) + '.csv';
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportJSON() {
+      const client = document.getElementById('clientName').value.trim();
+      const pricePerTon = Number(document.getElementById('pricePerTon').value || 0);
+      const data = {
+        client: client || null,
+        owner: { name: "محفوظ الحطامي", contact: "https://wa.me/967780788664" },
+        pricePerTon: pricePerTon || 0,
+        items: [],
+        totalWeightTon: 0,
+        totalPrice: 0
+      };
+      Array.from(tbody.children).forEach(tr => {
+        const size = tr.cells[0].textContent.trim();
+        const bundleTon = parseFloat(tr.dataset.bundleWeight || 0);
+        const rodsPerBundle = Number(tr.dataset.rodsPerBundle || 0);
+        const count = Number(tr.querySelector('input[type="number"]').value || 0);
+        const totalRods = rodsPerBundle * count;
+        const totalWeightTon = bundleTon * count;
+        const totalRowPrice = pricePerTon > 0 ? totalWeightTon * pricePerTon : 0;
+        data.items.push({size, bundleTon, rodsPerBundle, count, totalRods, totalWeightTon, totalRowPrice});
+        data.totalWeightTon += totalWeightTon;
+        data.totalPrice += totalRowPrice;
+      });
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeClient = client ? client.replace(/\s+/g,'_') + '_' : '';
+      const fileName = 'ironcalculator_' + safeClient + new Date().toISOString().slice(0,10) + '.json';
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function copySummary() {
+      const client = document.getElementById('clientName').value.trim() || '—';
+      // استخدم القيم العددية الخام للحصول على ملخص دقيق
+      let grandTons = 0;
+      let grandPrice = 0;
+      const pricePerTon = Number(document.getElementById('pricePerTon').value || 0);
+      Array.from(tbody.children).forEach(tr => {
+        const bundleTon = parseFloat(tr.dataset.bundleWeight || 0);
+        const count = Number(tr.querySelector('input[type="number"]').value || 0);
+        const totalWeightTon = bundleTon * count;
+        grandTons += totalWeightTon;
+        if (pricePerTon > 0) grandPrice += totalWeightTon * pricePerTon;
+      });
+
+      const summary = [
+        'اسم العميل: ' + client,
+        'الإجمالي النهائي لوزن الحديد (طن): ' + grandTons.toFixed(3),
+        'الإجمالي النهائي للسعر: ' + grandPrice.toFixed(2),
+        'تم إنشاء هذا البرنامج بواسطة: محفوظ الحطامي',
+        'للتواصل: https://wa.me/967780788664'
+      ].join('\n');
+      navigator.clipboard.writeText(summary).then(() => {
+        alert('تم نسخ الملخص للحافظة');
+      }).catch(() => {
+        alert('فشل النسخ. الرجاء السماح بالوصول للحافظة أو نسخ يدوياً.');
+      });
+    }
+  </script>
+</body>
+</html>
